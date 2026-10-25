@@ -5,7 +5,7 @@ export const demoMeals: Meal[] = [
   { id: 'm2', name: 'Beans & plantain', description: 'Beans porridge served with fried plantain', price: 1800, category: 'Meals', available: true, emoji: '🍲' },
   { id: 'm3', name: 'Fried rice & turkey', description: 'Vegetable fried rice with turkey', price: 3000, category: 'Meals', available: true, emoji: '🍚' },
   { id: 'm4', name: 'Chicken sandwich', description: 'Toasted sandwich with chicken filling', price: 1500, category: 'Snacks', available: true, emoji: '🥪' },
-  { id: 'm5', name: ' meat pie', description: 'Freshly baked meat pie', price: 700, category: 'Snacks', available: true, emoji: '🥟' },
+  { id: 'm5', name: 'Meat pie', description: 'Freshly baked meat pie', price: 700, category: 'Snacks', available: true, emoji: '🥟' },
   { id: 'm6', name: 'Water', description: 'Chilled bottled water', price: 300, category: 'Drinks', available: true, emoji: '💧' }
 ]
 

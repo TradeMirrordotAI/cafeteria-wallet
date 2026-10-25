@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownLeft, ArrowUpRight, BadgeCheck, Banknote, ChefHat, ChevronRight,
+  ArrowDownLeft, BadgeCheck, Banknote, ChevronRight,
   CircleHelp, ClipboardList, Clock3, CreditCard, LayoutDashboard, LogOut,
   Plus, Printer, Search, ShoppingBag, Wallet, Utensils, X
 } from 'lucide-react'
@@ -12,12 +12,13 @@ const money = (value: number) => `₦${value.toLocaleString('en-NG')}`
 
 export default function App() {
   const [role, setRole] = useState<Role>('student')
-  const [balance, setBalance] = useState(12500)
-  const [meals, setMeals] = useState<Meal[]>(demoMeals)
-  const [orders, setOrders] = useState<Order[]>(demoOrders)
+  const [balance, setBalance] = useState(() => Number(localStorage.getItem('campusbite_balance') || 12500))
+  const [meals, setMeals] = useState<Meal[]>(() => { try { return JSON.parse(localStorage.getItem('campusbite_meals') || 'null') || demoMeals } catch { return demoMeals } })
+  const [orders, setOrders] = useState<Order[]>(() => { try { return JSON.parse(localStorage.getItem('campusbite_orders') || 'null') || demoOrders } catch { return demoOrders } })
   const [cart, setCart] = useState<Record<string, number>>({})
   const [search, setSearch] = useState('')
   const [code, setCode] = useState('')
+  const [staffSearch, setStaffSearch] = useState('')
   const [notice, setNotice] = useState('')
   const [fundOpen, setFundOpen] = useState(false)
   const [fundAmount, setFundAmount] = useState('5000')
@@ -26,7 +27,12 @@ export default function App() {
   const cartItems = useMemo(() => meals.filter(m => cart[m.id]).map(m => ({ ...m, quantity: cart[m.id] })), [meals, cart])
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const filteredMeals = meals.filter(m => m.available && m.name.toLowerCase().includes(search.toLowerCase()))
-  const foundOrder = orders.find(o => o.code.toLowerCase() === code.trim().toLowerCase())
+  const foundOrder = orders.find(o => o.code.toLowerCase() === code.trim().toLowerCase() || (o.receiptNumber || '').toLowerCase() === code.trim().toLowerCase())
+  const staffOrders = orders.filter(o => `${o.code} ${o.receiptNumber || ''} ${o.studentName} ${o.studentId || ''}`.toLowerCase().includes(staffSearch.toLowerCase()))
+
+  useEffect(() => { localStorage.setItem('campusbite_balance', String(balance)) }, [balance])
+  useEffect(() => { localStorage.setItem('campusbite_meals', JSON.stringify(meals)) }, [meals])
+  useEffect(() => { localStorage.setItem('campusbite_orders', JSON.stringify(orders)) }, [orders])
 
   function addToCart(id: string) {
     setCart(current => ({ ...current, [id]: (current[id] || 0) + 1 }))
@@ -40,7 +46,7 @@ export default function App() {
     }
     const newOrder: Order = {
       id: crypto.randomUUID(),
-      code: `CB-${Math.floor(100000 + Math.random() * 900000)}`,
+      code: `CB-${String(Math.floor(100000 + Math.random() * 900000))}`, 
       receiptNumber: `CBR-${new Date().getFullYear()}-${Date.now().toString().slice(-7)}`,
       paymentReference: `DEMO-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
       studentId: 'DEMO-001',
@@ -69,7 +75,12 @@ export default function App() {
   }
 
   function updateStatus(orderId: string, status: OrderStatus) {
+    const target = orders.find(o => o.id === orderId)
+    if (!target || target.status === 'collected') { setNotice('This order has already been collected and cannot be changed.'); return }
+    if (status === 'collected' && target.status !== 'ready') { setNotice('Mark the order as ready before completing collection.'); return }
     setOrders(current => current.map(o => o.id === orderId ? { ...o, status } : o))
+    setSelectedOrder(current => current?.id === orderId ? { ...current, status } : current)
+    setNotice(status === 'collected' ? 'Collection completed. This code can no longer be redeemed.' : `Order updated to ${status}.`)
   }
 
   function printTicket(order: Order) {
@@ -131,16 +142,16 @@ export default function App() {
             {filteredMeals.map(meal => <article className="meal-card" key={meal.id}><div className="meal-image">{meal.emoji}</div><div className="meal-info"><span className="meal-category">{meal.category}</span><h3>{meal.name}</h3><p>{meal.description}</p><div className="meal-bottom"><strong>{money(meal.price)}</strong><button className="add-button" onClick={() => addToCart(meal.id)}><Plus size={15} /> Add</button></div></div></article>)}
           </div>
           {cartItems.length > 0 && <section className="cart-panel"><div><strong>{cartItems.reduce((s, i) => s + i.quantity, 0)} items in your order</strong><span>{money(total)}</span></div><button className="primary-button" onClick={checkout}>Place order <ChevronRight size={17} /></button></section>}
-          <section className="recent-section"><div className="section-heading"><div><h2>Recent orders</h2><p>Your latest cafeteria purchases.</p></div></div><OrderList orders={orders.filter(o => o.studentName === 'Demo Student' || o.studentName === 'Daniel T.').slice(0, 3)} onSelect={setSelectedOrder} /></section>
+          <section className="recent-section"><div className="section-heading"><div><h2>Recent orders</h2><p>Your latest cafeteria purchases.</p></div></div><OrderList orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section>
         </>}
 
         {role === 'cafeteria' && <>
           <div className="stats-row"><Stat icon={<ClipboardList />} label="Orders today" value={String(orders.length)} /><Stat icon={<Clock3 />} label="Awaiting collection" value={String(orders.filter(o => o.status !== 'collected').length)} /><Stat icon={<BadgeCheck />} label="Collected" value={String(orders.filter(o => o.status === 'collected').length)} /></div>
-          <section className="content-card lookup-card"><div><h2>Find a student order</h2><p>Enter the collection code provided by the student.</p></div><div className="lookup-input"><input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="e.g. CB-482915" /><button className="primary-button" onClick={() => setSelectedOrder(foundOrder || null)}>Find order</button></div>
+          <section className="content-card lookup-card"><div><h2>Find a student order</h2><p>Enter the collection code provided by the student.</p></div><div className="lookup-input"><input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Collection code or receipt number" /><button className="primary-button" onClick={() => setSelectedOrder(foundOrder || null)}>Find order</button></div>
             {code && !foundOrder && <p className="field-hint">No matching order found. Check the code and try again.</p>}
-            {selectedOrder && <div className="found-order"><div className="found-order-top"><div><span className="meal-category">ORDER FOUND</span><h3>{selectedOrder.code}</h3><p>{selectedOrder.studentName}</p></div><Status status={selectedOrder.status} /></div><div className="order-items">{selectedOrder.items.map((i, index) => <div key={index}><span>{i.quantity} × {i.name}</span><strong>{money(i.price * i.quantity)}</strong></div>)}</div><div className="order-total"><span>Total paid</span><strong>{money(selectedOrder.total)}</strong></div><button className="primary-button print-button" onClick={() => printTicket(selectedOrder)}><Printer size={17} /> Print receipt / ticket</button>{selectedOrder.status !== 'collected' && <button className="secondary-button full-button" onClick={() => updateStatus(selectedOrder.id, 'collected')}>Mark as collected</button>}</div>}
+            {selectedOrder && <div className="found-order"><div className="found-order-top"><div><span className="meal-category">ORDER FOUND</span><h3>{selectedOrder.code}</h3><p>{selectedOrder.studentName}</p></div><Status status={selectedOrder.status} /></div><div className="order-items">{selectedOrder.items.map((i, index) => <div key={index}><span>{i.quantity} × {i.name}</span><strong>{money(i.price * i.quantity)}</strong></div>)}</div><div className="order-total"><span>Total paid</span><strong>{money(selectedOrder.total)}</strong></div><button className="primary-button print-button" onClick={() => printTicket(selectedOrder)}><Printer size={17} /> Print receipt / ticket</button>{selectedOrder.status === 'paid' && <button className="secondary-button full-button" onClick={() => updateStatus(selectedOrder.id, 'preparing')}>Send to preparation</button>}{selectedOrder.status === 'preparing' && <button className="secondary-button full-button" onClick={() => updateStatus(selectedOrder.id, 'ready')}>Mark order ready</button>}{selectedOrder.status === 'ready' && <button className="secondary-button full-button" onClick={() => updateStatus(selectedOrder.id, 'collected')}>Confirm collection</button>}{selectedOrder.status === 'collected' && <p className="field-hint">This order has already been collected. Duplicate collection is blocked.</p>}</div>}
           </section>
-          <section className="recent-section"><div className="section-heading"><div><h2>All orders</h2><p>Recent orders placed by students.</p></div></div><OrderList orders={orders} onSelect={order => { setSelectedOrder(order); setCode(order.code) }} /></section>
+          <section className="recent-section"><div className="section-heading"><div><h2>All orders</h2><p>Search by student, collection code or receipt number.</p></div><div className="searchbox"><Search size={16} /><input value={staffSearch} onChange={e => setStaffSearch(e.target.value)} placeholder="Search orders" /></div></div><OrderList orders={staffOrders} onSelect={order => { setSelectedOrder(order); setCode(order.code) }} /></section>
         </>}
 
         {role === 'admin' && <>
